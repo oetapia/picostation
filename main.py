@@ -2,7 +2,7 @@ import time
 import urequests
 import json
 import machine
-from screen_library import Screen
+from screen import Screen
 try:
     import wifi
     import config
@@ -126,11 +126,43 @@ def show_startup():
         Screen.Sleep(0.08)
     Screen.Sleep(0.5)
 
+def launch_mini():
+    import framebuf
+    import icons_16.icons as icons
+
+    oled = Screen._display  # raw ssd1306 when OLED is active
+    oled.fill(0)
+
+    # Render clock icon (16x16) into a framebuffer and blit it
+    icon_data = icons.clock
+    size = 16
+    bpr = 2  # bytes per row for 16px wide
+    buf = bytearray(bpr * size)
+    for row in range(size):
+        for col in range(size):
+            if icon_data[row] & (1 << (size - 1 - col)):
+                buf[row * bpr + col // 8] |= (1 << (7 - (col % 8)))
+    fb = framebuf.FrameBuffer(buf, size, size, framebuf.MONO_HLSB)
+
+    # Centre icon + "mini" (16 icon + 8 gap + 32 text = 56px total)
+    x = (128 - 56) // 2  # 36
+    oled.blit(fb, x, 8)           # icon vertically centred: (32-16)//2 = 8
+    oled.text("mini", x + 24, 12) # text vertically centred: (32-8)//2 = 12
+    oled.show()
+
+    Screen.Sleep(3)
+    from mini.weather import MiniWeather
+    MiniWeather().run()
+
 def main():
+    if Screen.width == 128:  # OLED detected
+        launch_mini()
+        return
+
     show_startup()
     menu = GameMenu()
     menu.draw(force_redraw=True)
-    
+
     while True:
         result = menu.handle_input()
         if result == "selection_changed":

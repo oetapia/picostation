@@ -1,5 +1,5 @@
 import random
-from screen_library import Screen
+from screen import Screen
 
 SCREEN_WIDTH = 240
 SCREEN_HEIGHT = 240

@@ -2,7 +2,7 @@ import urequests
 import time
 import json
 import machine
-from screen_library import Screen
+from screen import Screen
 
 try:
     import wifi

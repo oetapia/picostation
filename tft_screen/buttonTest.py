@@ -1,5 +1,5 @@
 # Import the screen library
-from screen_library import Screen
+from screen import Screen
 
 # Example usage
 Screen.Write("Hello World!", 50, 50, Screen.BLACK)

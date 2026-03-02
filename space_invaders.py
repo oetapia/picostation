@@ -1,6 +1,6 @@
 import time
 import random
-from screen_library import Screen
+from screen import Screen
 
 class Player:
     def __init__(self, screen_width, screen_height):
