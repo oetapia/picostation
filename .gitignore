@@ -1,0 +1,6 @@
+#dependencies
+lib/
+venv/
+.DS_Store
+config.py
+old/
