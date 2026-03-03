@@ -134,7 +134,7 @@ def launch_mini():
     oled.fill(0)
 
     # Render clock icon (16x16) into a framebuffer and blit it
-    icon_data = icons.clock
+    icon_data = icons.ghost
     size = 16
     bpr = 2  # bytes per row for 16px wide
     buf = bytearray(bpr * size)

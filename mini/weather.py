@@ -25,7 +25,7 @@ except ImportError:
 # Cities to cycle through
 CITIES = ["Berlin", "Quito", "Seoul", "Madrid", "Raleigh", "NYC", "Bali"]
 
-CITY_SWITCH_INTERVAL = 10   # seconds between city switches
+CITY_SWITCH_INTERVAL = 18   # seconds between city switches
 WEATHER_REFRESH      = 300  # seconds between API calls per city
 
 
@@ -132,17 +132,17 @@ class MiniWeather:
             self.oled.text(_trunc(city.upper() + " " + time_str, 16), 0, 0)
 
             # Row 1 — temp + condition (scrolls if condition is long)
-            temp_str = f"{temp}C"
-            row1 = f"{temp_str} {condition}"
-            self.oled.text(_scroll(row1, 16, self.scroll_offset), 0, 8)
+            temp_str = f"{temp}C ({feels_like}C)"
+            row1 = f" {temp_str}"
+            self.oled.text(_scroll(row1, 16, self.scroll_offset), 0, 10)
 
             # Row 2 — feels like, wind, humidity (scrolls if too long)
-            row2 = f"F:{feels_like} W:{wind_kph} H:{humidity}"
-            self.oled.text(_scroll(row2, 16, self.scroll_offset), 0, 16)
+            row2 = f" {condition} W:{wind_kph}kph H:{humidity}%"
+            self.oled.text(_scroll(row2, 16, self.scroll_offset), 0, 20)
 
             # Row 3 — city indicator dots (compact, no truncation needed for 7 cities)
-            dots = "".join("*" if i == self.city_index else "." for i in range(len(CITIES)))
-            self.oled.text(dots, 0, 24)
+            #dots = "".join("*" if i == self.city_index else "." for i in range(len(CITIES)))
+            #self.oled.text(dots, 0, 24)
 
         self.scroll_offset += 1
         self.oled.show()
