@@ -14,6 +14,7 @@ Layout (16 chars × 4 rows at 8px each):
 import time
 import urequests
 from oled_screen import OLEDScreen
+from breadboard.buttons import GameControls
 
 try:
     import wifi
@@ -57,6 +58,7 @@ class MiniWeather:
         self.last_switch = time.time()
         self.scroll_offset = 0
         self.connected = False
+        self.controls = GameControls()
 
         self._show_msg("Connecting...")
         if WIFI_AVAILABLE:
@@ -149,19 +151,30 @@ class MiniWeather:
 
     # ------------------------------------------------------------------- run
 
+    def _switch_city(self, delta):
+        self.city_index = (self.city_index + delta) % len(CITIES)
+        self.scroll_offset = 0
+        self._maybe_refresh(self.current_city())
+
     def run(self):
         while True:
             city = self.current_city()
             self._maybe_refresh(city)
             self.scroll_offset = 0
 
-            # Redraw every second so scrolling advances; switch city after interval
+            # Redraw every second; buttons override auto-advance
             for _ in range(CITY_SWITCH_INTERVAL):
                 self.draw()
+                if self.controls.was_pressed("down"):
+                    self._switch_city(1)
+                    break
+                if self.controls.was_pressed("up"):
+                    self._switch_city(-1)
+                    break
                 time.sleep(1)
-
-            # Advance to next city
-            self.city_index = (self.city_index + 1) % len(CITIES)
+            else:
+                # Auto-advance only if no button was pressed
+                self.city_index = (self.city_index + 1) % len(CITIES)
 
 
 def run():
