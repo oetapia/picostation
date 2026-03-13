@@ -158,7 +158,7 @@ def launch_mini():
     from breadboard.buttons import GameControls
     controls = GameControls()
 
-    APPS = ["WEATHER", "IR SENSOR", "ACCEL", "LED TEST", "SOUND", "VOLUMIO"]
+    APPS = ["WEATHER", "IR SENSOR", "ACCEL", "LED TEST", "SOUND", "VOLUMIO", "TOF"]
     selected = 0
     scroll_start = 0
     VISIBLE = 4  # rows fit on 32px OLED at 8px spacing
@@ -208,9 +208,12 @@ def launch_mini():
     elif selected == 4:
         from mini.sound_app import run as run_sound
         run_sound()
-    else:
+    elif selected == 5:
         from mini.volumio_mini import run as run_volumio
         run_volumio()
+    else:
+        from mini.tof_main import run as run_tof
+        run_tof()
 
 def main():
     if Screen.width == 128:  # OLED detected
