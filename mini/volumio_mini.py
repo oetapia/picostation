@@ -16,6 +16,8 @@ import urequests
 from oled_screen import OLEDScreen
 from breadboard.buttons import GameControls
 from breadboard.leds import LEDs
+import framebuf
+import icons_16.icons as icons
 
 try:
     import wifi
@@ -32,17 +34,31 @@ def _trunc(text, n):
     return text[:n] if len(text) <= n else text[:n - 1] + "~"
 
 
+def _scroll(text, width, offset):
+    """Return a window of `width` chars from `text`, scrolling by `offset`."""
+    if len(text) <= width:
+        return text
+    padded = text + "   "          # small gap before the text repeats
+    loop = len(padded)
+    start = offset % loop
+    chunk = padded[start:start + width]
+    if len(chunk) < width:         # wrap around
+        chunk += padded[:width - len(chunk)]
+    return chunk
+
+
 class VolumioMini:
     def __init__(self):
         self.oled     = OLEDScreen()._display   # raw SSD1306 driver
         self.controls = GameControls()
         self.leds     = LEDs()
 
-        self.title     = ""
-        self.artist    = ""
-        self.status    = "stop"
-        self.last_poll = 0
-        self.connected = False
+        self.title       = ""
+        self.artist      = ""
+        self.status      = "stop"
+        self.last_poll   = 0
+        self.connected   = False
+        self.scroll_offset = 0
 
         self.leds.all_off()
         self._msg("Connecting...")
@@ -67,12 +83,12 @@ class VolumioMini:
 
     def _update_leds(self):
         """Green when playing, red when paused/stopped."""
-        if self.status == "play":
-            self.leds.on("green")
-            self.leds.off("red")
-        else:
-            self.leds.off("green")
-            self.leds.on("red")
+        #if self.status == "play":
+            #self.leds.on("green")
+            #self.leds.off("red")
+        #else:
+            #self.leds.off("green")
+            #self.leds.on("red")
 
     def _flash(self, led_name):
         """Quick visual acknowledgement for track skip buttons."""
@@ -112,15 +128,29 @@ class VolumioMini:
 
     # ------------------------------------------------------------------ draw
 
+    
+
     def draw(self):
-        icon = ">" if self.status == "play" else "||"
+        # Pick the right 16×16 icon based on playback state
+        icon_data = icons.play if self.status == "play" else icons.pause
+        size = 16
+        bpr = 2  # bytes per row for a 16-px-wide image
+        buf = bytearray(bpr * size)
+        for row in range(size):
+            for col in range(size):
+                if icon_data[row] & (1 << (size - 1 - col)):
+                    buf[row * bpr + col // 8] |= (1 << (7 - (col % 8)))
+        fb = framebuf.FrameBuffer(buf, size, size, framebuf.MONO_HLSB)
 
         self.oled.fill(0)
-        # Row 0 — status icon + artist
-        self.oled.text(_trunc(icon + " " + self.artist, 16), 0, 0)
-        # Row 2 — track title
-        self.oled.text(_trunc(self.title, 16), 0, 16)
+        # Row 0 — play/pause icon (16×16) + artist name
+        self.oled.blit(fb, 0, 0)
+        self.oled.text(_trunc(self.artist, 12), 18, 4)
+        # Row 1 — scrolling track title
+        self.oled.text(_scroll(self.title, 16, self.scroll_offset), 0, 20)
         self.oled.show()
+
+        self.scroll_offset += 1
 
     # ------------------------------------------------------------------- run
 
