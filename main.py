@@ -32,7 +32,7 @@ class GameMenu:
             return  # No change needed
             
         Screen.Clear()
-        Screen.Write("ARCADE GAMES", 65, 20, Screen.YELLOW)
+        Screen.Write("Apps", 65, 20, Screen.YELLOW)
         Screen.DrawLine(65, 35, 175, 35, Screen.YELLOW)
         
         start_y = 55

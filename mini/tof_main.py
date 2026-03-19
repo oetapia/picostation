@@ -3,8 +3,8 @@ import time
 from oled_screen import OLEDScreen
 from vl53l0x_mp import VL53L0X, VL53L0XError
 
-SDA_PIN = 0
-SCL_PIN = 1
+SDA_PIN = 8
+SCL_PIN = 9
 I2C_FREQ = 100_000
 
 
