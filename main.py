@@ -92,7 +92,7 @@ class GameMenu:
 def launch_volumio():
     Screen.Clear()
     Screen.Write("Launching Volumio...", 40, 100, Screen.YELLOW)
-    from volumio3 import VolumioGame
+    from apps.volumio3 import VolumioGame
     game = VolumioGame()
     game.run()
     Screen.Sleep(1)
@@ -101,19 +101,19 @@ def launch_volumio():
 def launch_weather():
     Screen.Clear()
     Screen.Write("Launching Weather...", 40, 100, Screen.YELLOW)
-    from weather import WeatherGame
+    from apps.weather import WeatherGame
     game = WeatherGame()
     game.run()
     Screen.Sleep(1)
 
 
 def launch_space_invaders():
-    from space_invaders import SpaceInvadersGame
+    from apps.space_invaders import SpaceInvadersGame
     game = SpaceInvadersGame()
     game.run()
 
 def launch_snake():
-    from snake import SnakeGame
+    from apps.snake import SnakeGame
     game = SnakeGame()
     game.run()
 
