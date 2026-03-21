@@ -156,10 +156,10 @@ class PicoDeployer:
             self.log("DRY RUN — skipping wipe", 'warning')
             return True
         # Run a recursive delete on the Pico via a short exec snippet.
-        # Skips /lib so third-party libraries are preserved.
+        # Skips /lib (third-party libraries) and /config.py (credentials).
         wipe_script = (
             "import os\n"
-            "SKIP = {'/lib'}\n"
+            "SKIP = {'/lib', '/config.py'}\n"
             "def _rm(p):\n"
             "    if p in SKIP:\n"
             "        return\n"
