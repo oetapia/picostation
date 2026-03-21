@@ -10,12 +10,14 @@ Requirements:
     pip install mpremote
 
 Usage:
-    python deploy_to_pico.py [--dry-run] [--force] [--verbose]
+    python deploy_to_pico.py [--dry-run] [--force] [--verbose] [--version {mini,full,auto}]
 
 Options:
-    --dry-run    Show what would be copied without actually copying
-    --force      Copy all files regardless of changes
-    --verbose    Show detailed output
+    --dry-run              Show what would be copied without actually copying
+    --force                Copy all files regardless of changes
+    --verbose              Show detailed output
+    --version {mini,full,auto}
+                           Which main to deploy (prompts if omitted)
 """
 
 import subprocess
@@ -56,10 +58,22 @@ class PicoDeployer:
         '.git',
     ]
 
-    def __init__(self, dry_run=False, force=False, verbose=False):
+    VERSION_MAIN = {
+        'mini': 'main_mini.py',
+        'full': 'main_full.py',
+        'auto': 'main.py',
+    }
+
+    def __init__(self, dry_run=False, force=False, verbose=False, version='auto', clean=False):
         self.dry_run = dry_run
         self.force = force
         self.verbose = verbose
+        self.version = version
+        self.clean = clean
+        # Maps local filename → remote filename for files that need renaming
+        self.rename_map = {}
+        if version in ('mini', 'full'):
+            self.rename_map[self.VERSION_MAIN[version]] = 'main.py'
         self.stats = {'copied': 0, 'skipped': 0, 'errors': 0, 'total': 0}
 
     def log(self, message, level='info'):
@@ -114,11 +128,20 @@ class PicoDeployer:
     def get_local_files(self) -> list:
         """Collect all local files to deploy."""
         files = []
-        for name in self.INCLUDE_FILES:
+        include_files = list(self.INCLUDE_FILES)
+        if self.version in ('mini', 'full'):
+            include_files = [f for f in include_files if f != 'main.py']
+            include_files.insert(0, self.VERSION_MAIN[self.version])
+        for name in include_files:
             p = Path(name)
             if p.exists() and not self.should_exclude(p):
                 files.append(p)
+        skip_dirs = set()
+        if self.version == 'mini':
+            skip_dirs.add('icons_rgb565')
         for dirname in self.INCLUDE_DIRS:
+            if dirname in skip_dirs:
+                continue
             d = Path(dirname)
             if d.is_dir():
                 for p in sorted(d.rglob('*')):
@@ -126,16 +149,51 @@ class PicoDeployer:
                         files.append(p)
         return files
 
+    def wipe_pico(self) -> bool:
+        """Delete all files and directories on the Pico, leaving a clean filesystem."""
+        print("🗑  Wiping Pico filesystem...")
+        if self.dry_run:
+            self.log("DRY RUN — skipping wipe", 'warning')
+            return True
+        # Run a recursive delete on the Pico via a short exec snippet.
+        # Skips /lib so third-party libraries are preserved.
+        wipe_script = (
+            "import os\n"
+            "SKIP = {'/lib'}\n"
+            "def _rm(p):\n"
+            "    if p in SKIP:\n"
+            "        return\n"
+            "    try:\n"
+            "        entries = os.listdir(p)\n"
+            "    except OSError:\n"
+            "        os.remove(p)\n"
+            "        return\n"
+            "    for e in entries:\n"
+            "        _rm((p.rstrip('/') + '/' + e))\n"
+            "    if p != '/':\n"
+            "        os.rmdir(p)\n"
+            "_rm('/')\n"
+            "print('wipe done')\n"
+        )
+        stdout, stderr, returncode = self.run_mpremote(['exec', wipe_script])
+        if returncode != 0 or 'wipe done' not in stdout:
+            self.log(f"Wipe failed: {stderr.strip() or stdout.strip()}", 'error')
+            return False
+        print("✅ Pico filesystem wiped\n")
+        return True
+
     def ensure_remote_dir(self, remote_dir: str):
         """Create directory on Pico (ignores error if it already exists)."""
         self.run_mpremote(['mkdir', f':{remote_dir}'])
 
     def copy_file(self, local_file: Path) -> bool:
-        remote = f':{local_file}'
+        remote_name = self.rename_map.get(str(local_file), str(local_file))
+        remote = f':{remote_name}'
         if self.dry_run:
-            print(f"  would copy → {local_file}")
+            label = f"{local_file} → {remote_name}" if remote_name != str(local_file) else str(local_file)
+            print(f"  would copy → {label}")
             return True
-        parent = local_file.parent
+        parent = Path(remote_name).parent
         if str(parent) != '.':
             self.ensure_remote_dir(str(parent))
         _, stderr, returncode = self.run_mpremote(['cp', str(local_file), remote])
@@ -145,13 +203,17 @@ class PicoDeployer:
         return True
 
     def deploy(self) -> bool:
+        version_label = {'mini': 'Mini (OLED)', 'full': 'Full (TFT)', 'auto': 'Auto-detect'}.get(self.version, self.version)
         print("=" * 55)
-        print("🚀 PicoStation Deploy")
+        print(f"🚀 PicoStation Deploy  [{version_label}]")
         print("=" * 55)
         if self.dry_run:
             self.log("DRY RUN — no files will be copied\n", 'warning')
 
         if not self.check_connection():
+            return False
+
+        if self.clean and not self.wipe_pico():
             return False
 
         local_files = self.get_local_files()
@@ -172,13 +234,15 @@ class PicoDeployer:
         print("-" * 55)
         for local_file in local_files:
             self.stats['total'] += 1
-            remote_size = remote_files.get(str(local_file))
+            remote_name = self.rename_map.get(str(local_file), str(local_file))
+            remote_size = remote_files.get(remote_name)
             local_size = local_file.stat().st_size
             needs_copy = self.force or remote_size is None or remote_size != local_size
 
             if needs_copy:
                 tag = "new" if remote_size is None else f"{remote_size}→{local_size}B"
-                print(f"📤 {local_file}  ({tag})")
+                label = f"{local_file} → {remote_name}" if remote_name != str(local_file) else str(local_file)
+                print(f"📤 {label}  ({tag})")
                 if self.copy_file(local_file):
                     self.stats['copied'] += 1
                 else:
@@ -205,6 +269,22 @@ class PicoDeployer:
         return True
 
 
+def prompt_version() -> str:
+    print("Which version do you want to deploy?")
+    print("  1) Full  — TFT arcade (main_full.py → main.py)")
+    print("  2) Mini  — OLED apps  (main_mini.py → main.py)")
+    print("  3) Auto  — hardware auto-detect (main.py as-is)")
+    while True:
+        choice = input("Enter 1, 2, or 3: ").strip()
+        if choice == '1':
+            return 'full'
+        elif choice == '2':
+            return 'mini'
+        elif choice == '3':
+            return 'auto'
+        print("Please enter 1, 2, or 3.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Deploy PicoStation files to Raspberry Pi Pico via mpremote'
@@ -215,9 +295,16 @@ def main():
                         help='Copy all files regardless of changes')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Show skipped files too')
+    parser.add_argument('--version', choices=['mini', 'full', 'auto'],
+                        help='Which main to deploy (prompts if omitted)')
+    parser.add_argument('--clean', action='store_true',
+                        help='Wipe the Pico filesystem before deploying')
     args = parser.parse_args()
 
-    deployer = PicoDeployer(dry_run=args.dry_run, force=args.force, verbose=args.verbose)
+    version = args.version if args.version else prompt_version()
+
+    deployer = PicoDeployer(dry_run=args.dry_run, force=args.force, verbose=args.verbose,
+                            version=version, clean=args.clean)
     sys.exit(0 if deployer.deploy() else 1)
 
 
