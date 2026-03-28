@@ -55,7 +55,6 @@ NON_PRODUCTION_PATTERNS = {
     'oled_screen/display.py',
     'oled_screen/minimal.py',
     'sync_branches.py',
-    'deploy_to_pico.py',
     'SYNC_BRANCHES.md',
     'README.md',
     'VOLUMIO_MINI.md',
@@ -186,8 +185,15 @@ def cherry_pick_with_auto_resolve(commit_hash: str, auto_resolve: bool = False) 
             # Add all resolved changes
             run_command(['git', 'add', '.'])
 
-            # Continue cherry-pick
-            code, _, _ = run_command(['git', 'cherry-pick', '--continue'], check=False)
+            # Check if anything is left to commit (cherry-pick may be empty)
+            _, diff_output, _ = run_command(['git', 'diff', '--cached', '--name-only'], check=False)
+            if not diff_output.strip():
+                # All changes were non-production files — skip the empty commit
+                print(f"{Colors.YELLOW}⊘ No production changes remain — skipping commit{Colors.ENDC}")
+                code, _, _ = run_command(['git', 'cherry-pick', '--skip'], check=False)
+            else:
+                # Continue cherry-pick with remaining production changes
+                code, _, _ = run_command(['git', 'cherry-pick', '--continue', '--no-edit'], check=False)
 
             if code == 0:
                 print(f"{Colors.GREEN}✓ Cherry-pick completed with auto-resolution{Colors.ENDC}")
