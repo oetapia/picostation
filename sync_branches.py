@@ -27,6 +27,7 @@ PRODUCTION_FILES = {
     'main.py',
     'screen.py',
     'wifi.py',
+    'deploy_to_pico.py',
     'vl53l0x_mp.py',
 
     # Configuration (config.py is gitignored — user manages it manually)
