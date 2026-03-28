@@ -1,3 +1,4 @@
+# APP: WEATHER
 """
 mini/weather.py — compact weather display for the OLED (SSD1306 128x32).
 
