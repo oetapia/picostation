@@ -1,0 +1,32 @@
+{
+  "name": "remote_xbox_clone",
+  "protocol": "rc6",
+  "commands": {
+    "0F74:1E": "up",       "0FF4:1E": "up",
+    "07FA:0F": "down",     "07BA:0F": "down",
+    "0F74:20": "left",     "0FF4:20": "left",
+    "07BA:10": "right",    "07FA:10": "right",
+    "0F74:16": "play",     "0FF4:16": "play",
+    "0FF4:18": "pause",    "0F74:18": "pause",
+    "07BA:0C": "stop",     "07FA:0C": "stop",
+    "0FF4:14": "rewind",   "0F74:14": "rewind",
+    "07BA:0A": "forward",  "07FA:0A": "forward",
+    "07BA:0D": "prev",     "07FA:0D": "prev",
+    "0FF4:1A": "next",     "0F74:1A": "next",
+    "0F74:0C": "off",      "0FF4:0C": "off",
+    "0FF4:28": "eject",    "0F74:28": "eject",
+    "0F74:22": "select",   "0FF4:22": "select",
+    "07FA:11": "back",     "07BA:11": "back",
+    "07BA:07": "info",     "07FA:07": "info",
+    "0FF4:24": "menu",     "0F74:24": "menu",
+    "07BA:27": "display",  "07FA:27": "display",
+    "07FA:28": "title",    "07BA:28": "title",
+    "0FF4:64": "xbox",     "0F74:64": "xbox",
+    "0F74:26": "yellow",   "0FF4:26": "yellow",
+    "07FA:09": "blue",     "07BA:09": "blue",
+    "0FF4:12": "green",    "0F74:12": "green",
+    "07BA:12": "red",      "07FA:12": "red",
+    "07FA:06": "start",    "07BA:06": "start",
+    "07FA:0B": "rec",      "07BA:0B": "rec"
+  }
+}

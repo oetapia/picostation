@@ -1,0 +1,19 @@
+{
+  "name": "remote_tiny",
+  "address": "0x00",
+  "commands": {
+    "0x11": "play_pause",
+    "0x12": "next",
+    "0x10": "prev",
+    "0x0D": "vol_up",
+    "0x15": "vol_down",
+    "0x09": "mute",
+    "0x08": "repeat",
+    "0x0A": "shuffle",
+    "0x04": "up",
+    "0x06": "down",
+    "0x05": "enter",
+    "0x02": "menu",
+    "0x00": "power"
+  }
+}

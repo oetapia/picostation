@@ -10,7 +10,7 @@ Requirements:
     pip install mpremote
 
 Usage:
-    python deploy_to_pico.py [--dry-run] [--force] [--verbose] [--version {mini,full,auto}]
+    python deploy_to_pico.py [--dry-run] [--force] [--verbose] [--version {mini,full,auto}] [--remote REMOTE ...]
 
 Options:
     --dry-run              Show what would be copied without actually copying
@@ -18,6 +18,9 @@ Options:
     --verbose              Show detailed output
     --version {mini,full,auto}
                            Which main to deploy (prompts if omitted)
+    --remote REMOTE        IR profile(s) to deploy, e.g. --remote tiny xbox
+                           Matches by substring against filenames in ir_profiles/.
+                           Omit to deploy all profiles.
 """
 
 import subprocess
@@ -42,6 +45,7 @@ class PicoDeployer:
     INCLUDE_DIRS = [
         'apps',
         'mini',
+        'ir_profiles',
         'breadboard',
         'oled_screen',
         'tft_screen',
@@ -64,12 +68,13 @@ class PicoDeployer:
         'auto': 'main.py',
     }
 
-    def __init__(self, dry_run=False, force=False, verbose=False, version='auto', clean=False):
+    def __init__(self, dry_run=False, force=False, verbose=False, version='auto', clean=False, remotes=None):
         self.dry_run = dry_run
         self.force = force
         self.verbose = verbose
         self.version = version
         self.clean = clean
+        self.remotes = remotes  # list of profile substrings, or None for all
         # Maps local filename → remote filename for files that need renaming
         self.rename_map = {}
         if version in ('mini', 'full'):
@@ -145,8 +150,12 @@ class PicoDeployer:
             d = Path(dirname)
             if d.is_dir():
                 for p in sorted(d.rglob('*')):
-                    if p.is_file() and not self.should_exclude(p):
-                        files.append(p)
+                    if not p.is_file() or self.should_exclude(p):
+                        continue
+                    if dirname == 'ir_profiles' and self.remotes is not None:
+                        if not any(r in p.name for r in self.remotes):
+                            continue
+                    files.append(p)
         return files
 
     def wipe_pico(self) -> bool:
@@ -202,6 +211,20 @@ class PicoDeployer:
             return False
         return True
 
+    def prune_remote_profiles(self, remote_files: dict):
+        """Remove ir_profiles/ files from the Pico that don't match --remote selection."""
+        for remote_path in list(remote_files):
+            if not remote_path.startswith('ir_profiles/'):
+                continue
+            fname = remote_path.split('/')[-1]
+            if any(r in fname for r in self.remotes):
+                continue
+            print(f"🗑  removing {remote_path}  (not in --remote selection)")
+            if not self.dry_run:
+                _, stderr, returncode = self.run_mpremote(['rm', f':{remote_path}'])
+                if returncode != 0:
+                    self.log(f"Failed to remove {remote_path}: {stderr.strip()}", 'error')
+
     def deploy(self) -> bool:
         version_label = {'mini': 'Mini (OLED)', 'full': 'Full (TFT)', 'auto': 'Auto-detect'}.get(self.version, self.version)
         print("=" * 55)
@@ -253,6 +276,10 @@ class PicoDeployer:
                 self.stats['skipped'] += 1
 
         print("-" * 55)
+
+        if self.remotes is not None:
+            self.prune_remote_profiles(remote_files)
+
         print(f"\n📊 {self.stats['copied']} copied, "
               f"{self.stats['skipped']} skipped, "
               f"{self.stats['errors']} errors  "
@@ -299,12 +326,15 @@ def main():
                         help='Which main to deploy (prompts if omitted)')
     parser.add_argument('--clean', action='store_true',
                         help='Wipe the Pico filesystem before deploying')
+    parser.add_argument('--remote', nargs='+', metavar='REMOTE',
+                        help='IR profile(s) to deploy, matched by substring '
+                             '(e.g. --remote tiny xbox). Omit to deploy all.')
     args = parser.parse_args()
 
     version = args.version if args.version else prompt_version()
 
     deployer = PicoDeployer(dry_run=args.dry_run, force=args.force, verbose=args.verbose,
-                            version=version, clean=args.clean)
+                            version=version, clean=args.clean, remotes=args.remote)
     sys.exit(0 if deployer.deploy() else 1)
 
 

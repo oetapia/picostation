@@ -1,3 +1,4 @@
+# APP: ACCEL
 from machine import I2C, Pin
 import time
 from oled_screen import OLEDScreen
