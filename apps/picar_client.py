@@ -1,3 +1,4 @@
+# APP: PICAR
 import urequests
 import time
 import machine
@@ -34,12 +35,12 @@ class PicarApp:
         self.tilt_pitch = 0
         self.tilt_roll = 0
 
-        self.last_sensor_update = 0
-        self.sensor_update_interval = 1  # seconds
-
         self.connected = False
         self.error_message = ""
         self.needs_redraw = True
+
+        self._last_input_ms = 0
+        self._input_cooldown_ms = 150
 
         self.prev_state = None
 
@@ -53,7 +54,11 @@ class PicarApp:
     # ========== HTTP helpers ==========
     def _get(self, path):
         url = f"{self.base_url}{path}"
-        response = urequests.get(url)
+        try:
+            response = urequests.get(url, timeout=2)
+        except TypeError:
+            # urequests build without timeout kwarg
+            response = urequests.get(url)
         try:
             data = response.json()
         finally:
@@ -147,51 +152,43 @@ class PicarApp:
 
     # ========== Input ==========
     def handle_input(self):
-        if Screen.Up():
-            self.set_motor(min(100, self.motor_speed + 25))
-            Screen.Sleep(0.2)
-
-        elif Screen.Down():
-            self.set_motor(max(-100, self.motor_speed - 25))
-            Screen.Sleep(0.2)
-
-        elif Screen.Left():
-            self.set_servo(max(0, self.servo_angle - 15))
-            Screen.Sleep(0.15)
-
-        elif Screen.Right():
-            self.set_servo(min(180, self.servo_angle + 15))
-            Screen.Sleep(0.15)
-
-        elif Screen.Center() or Screen.ButtonA():
-            self.fetch_sensors()
-            Screen.Sleep(0.2)
-
-        elif Screen.ButtonB():
-            self.set_motor(75)
-            Screen.Sleep(0.2)
-
-        elif Screen.ButtonY():
-            self.set_motor(-75)
-            Screen.Sleep(0.2)
-
-        elif Screen.ButtonX():
+        # X always exits immediately, no debounce
+        if Screen.ButtonX():
             self.set_motor(0)
             return "exit"
 
-        return None
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self._last_input_ms) < self._input_cooldown_ms:
+            return None
 
-    def update(self):
-        now = time.time()
-        if self.connected and now - self.last_sensor_update >= self.sensor_update_interval:
+        acted = True
+        if Screen.Up():
+            self.set_motor(min(100, self.motor_speed + 25))
+        elif Screen.Down():
+            self.set_motor(max(-100, self.motor_speed - 25))
+        elif Screen.Left():
+            self.set_servo(max(0, self.servo_angle - 15))
+        elif Screen.Right():
+            self.set_servo(min(180, self.servo_angle + 15))
+        elif Screen.Center():
             self.fetch_sensors()
-            self.last_sensor_update = now
+        elif Screen.ButtonB():
+            self.set_motor(0)
+        elif Screen.ButtonY():
+            self.set_servo(90)
+        else:
+            acted = False
+
+        if acted:
+            self._last_input_ms = now
+        return None
 
     # ========== Drawing ==========
     def draw(self):
         if not self.needs_redraw:
             return
 
+        Screen.BeginDraw()
         Screen.Clear()
 
         if not self.connected:
@@ -199,6 +196,7 @@ class PicarApp:
             Screen.Write("Not Connected", 60, 100, Screen.RED)
             Screen.Write(self.error_message, 20, 120, Screen.RED)
             Screen.Write("X: Back to Menu", 50, 200, Screen.CYAN)
+            Screen.EndDraw()
             self.needs_redraw = False
             return
 
@@ -252,11 +250,10 @@ class PicarApp:
         Screen.DrawLine(10, 195, 230, 195, Screen.CYAN)
         Screen.Write("UP/DN: speed", 10, 205, Screen.CYAN)
         Screen.Write("L/R: steer", 130, 205, Screen.CYAN)
-        Screen.Write("B: fwd", 10, 215, Screen.CYAN)
-        Screen.Write("Y: rev", 80, 215, Screen.CYAN)
-        Screen.Write("A: sensors", 140, 215, Screen.CYAN)
-        Screen.Write("X: Menu", 90, 225, Screen.CYAN)
+        Screen.Write("B: stop", 10, 215, Screen.CYAN)
+        Screen.Write("Y: center", 80, 215, Screen.CYAN)
 
+        Screen.EndDraw()
         self.needs_redraw = False
 
     def _fmt_cm(self, value):
@@ -270,7 +267,6 @@ class PicarApp:
             result = self.handle_input()
             if result == "exit":
                 return
-            self.update()
             self.draw()
             Screen.Sleep(0.05)
 
@@ -278,3 +274,6 @@ class PicarApp:
 def launch_picar():
     app = PicarApp()
     app.run()
+
+
+run = launch_picar

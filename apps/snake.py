@@ -1,3 +1,4 @@
+# APP: SNAKE
 import random
 from screen import Screen
 
@@ -113,3 +114,6 @@ class SnakeGame:
 def launch_snake():
     game = SnakeGame()
     game.run()
+
+
+run = launch_snake

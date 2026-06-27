@@ -1,121 +1,89 @@
-import time
-import urequests
-import json
+import os
 import machine
 from screen import Screen
-try:
-    import wifi
-    import config
-    WIFI_AVAILABLE = True
-except ImportError:
-    WIFI_AVAILABLE = False
-    print("WiFi modules not available")
 
 # Initialize LED
 led = machine.Pin("LED", machine.Pin.OUT)
 led.off()
 
+
+def _discover_apps():
+    """Discover apps from apps/*.py by reading the `# APP: NAME` header line."""
+    apps = []
+    try:
+        for fname in sorted(os.listdir("apps")):
+            if not fname.endswith(".py") or fname == "__init__.py":
+                continue
+            try:
+                with open("apps/" + fname) as fp:
+                    line = fp.readline().strip()
+                if line.startswith("# APP:"):
+                    apps.append((line[6:].strip(), fname[:-3]))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return apps  # [(label, module_stem), ...]
+
+
+APPS = _discover_apps()
+
+
 class GameMenu:
     def __init__(self):
-        self.selected_game = 0
-        self.last_drawn = -1  # Track what was last drawn
-        self.games = [
-            {"name": "SPACE INVADERS", "description": "Shoot the aliens!"},
-            {"name": "MUSIC PLAYER", "description": "Volumio controls"},
-            {"name": "WEATHER", "description": "City weather"},
-            {"name": "SNAKE", "description": "Classic snake game"}
-        ]
-        
+        self.selected = 0
+        self.last_drawn = -1
+        self.apps = APPS
+
     def draw(self, force_redraw=False):
-        """Draw menu only when selection changes"""
-        if not force_redraw and self.selected_game == self.last_drawn:
-            return  # No change needed
-            
+        if not force_redraw and self.selected == self.last_drawn:
+            return
+
         Screen.Clear()
         Screen.Write("Apps", 65, 20, Screen.YELLOW)
         Screen.DrawLine(65, 35, 175, 35, Screen.YELLOW)
-        
+
+        if not self.apps:
+            Screen.Write("No apps installed", 30, 110, Screen.RED)
+            self.last_drawn = self.selected
+            return
+
         start_y = 55
-        item_height = 30
-        
-        for i, game in enumerate(self.games):
+        item_height = 20
+        for i, (label, _stem) in enumerate(self.apps):
             y_pos = start_y + (i * item_height)
-            
-            if i == self.selected_game:
+            if i == self.selected:
                 Screen.Write(">", 10, y_pos, Screen.BLUE)
-                name_color = Screen.WHITE
-                desc_color = Screen.WHITE
-            else:
-                name_color = Screen.WHITE
-                desc_color = Screen.GREEN
-            
-            Screen.Write(game["name"], 25, y_pos, name_color)
-            Screen.Write(game["description"], 25, y_pos + 10, desc_color)
-        
+            Screen.Write(label, 25, y_pos, Screen.WHITE)
+
         Screen.Write("UP/DOWN: Select", 10, 220, Screen.CYAN)
-        Screen.Write("B: Start Game", 130, 220, Screen.CYAN)
-        
-        self.last_drawn = self.selected_game
-    
+        Screen.Write("B: Start App", 130, 220, Screen.CYAN)
+
+        self.last_drawn = self.selected
+
     def handle_input(self):
+        if not self.apps:
+            return None
         if Screen.Up():
-            self.selected_game = (self.selected_game - 1) % len(self.games)
+            self.selected = (self.selected - 1) % len(self.apps)
             Screen.Sleep(0.15)
             return "selection_changed"
         elif Screen.Down():
-            self.selected_game = (self.selected_game + 1) % len(self.games)
+            self.selected = (self.selected + 1) % len(self.apps)
             Screen.Sleep(0.15)
             return "selection_changed"
         elif Screen.ButtonB():
             Screen.Sleep(0.2)
-            return self.launch_selected_game()
-        return None
-    
-    def launch_selected_game(self):
-        selected = self.games[self.selected_game]
-        
-        if selected["name"] == "SPACE INVADERS":
-            launch_space_invaders()  # <- No arguments
-            return "game_launched"
-        elif selected["name"] == "MUSIC PLAYER":
-            launch_volumio()
-            return "game_launched"
-        elif selected["name"] == "WEATHER":
-            launch_weather()
-            return "game_launched"
-        elif selected["name"] == "SNAKE":
-            launch_snake()
+            self.launch_selected()
             return "game_launched"
         return None
 
-# Placeholder Volumio and Snake launch functions
-def launch_volumio():
-    Screen.Clear()
-    Screen.Write("Launching Volumio...", 40, 100, Screen.YELLOW)
-    from apps.volumio3 import VolumioGame
-    game = VolumioGame()
-    game.run()
-    Screen.Sleep(1)
+    def launch_selected(self):
+        _label, stem = self.apps[self.selected]
+        Screen.Clear()
+        mod = __import__("apps." + stem, None, None, ["run"])
+        mod.run()
 
-
-def launch_weather():
-    Screen.Clear()
-    Screen.Write("Launching Weather...", 40, 100, Screen.YELLOW)
-    from apps.weather import WeatherGame
-    game = WeatherGame()
-    game.run()
-    Screen.Sleep(1)
-
-
-def launch_space_invaders():
-    from apps.space_invaders import SpaceInvadersGame
-    game = SpaceInvadersGame()
-    game.run()
-
-def launch_snake():
-    from apps.snake import SnakeGame
-    game = SnakeGame()
-    game.run()
 
 def show_startup():
     Screen.Clear()
@@ -126,104 +94,11 @@ def show_startup():
         Screen.Sleep(0.08)
     Screen.Sleep(0.5)
 
-def launch_mini():
-    import framebuf
-    import icons_16.icons as icons
-
-    oled = Screen._display  # raw ssd1306 when OLED is active
-    oled.fill(0)
-
-    # Render clock icon (16x16) into a framebuffer and blit it
-    icon_data = icons.ghost
-    size = 16
-    bpr = 2  # bytes per row for 16px wide
-    buf = bytearray(bpr * size)
-    for row in range(size):
-        for col in range(size):
-            if icon_data[row] & (1 << (size - 1 - col)):
-                buf[row * bpr + col // 8] |= (1 << (7 - (col % 8)))
-    fb = framebuf.FrameBuffer(buf, size, size, framebuf.MONO_HLSB)
-
-    # Centre icon + "mini" (16 icon + 8 gap + 32 text = 56px total)
-    x = (128 - 56) // 2  # 36
-    oled.blit(fb, x, 8)           # icon vertically centred: (32-16)//2 = 8
-    oled.text("mini", x + 24, 12) # text vertically centred: (32-8)//2 = 12
-    oled.show()
-
-    Screen.Sleep(3)
-
-    # -------------------------
-    # Mini app selection menu
-    # -------------------------
-    from breadboard.buttons import GameControls
-    controls = GameControls()
-
-    APPS = ["WEATHER", "IR SENSOR", "ACCEL", "LED TEST", "SOUND", "VOLUMIO", "TOF"]
-    selected = 0
-    scroll_start = 0
-    VISIBLE = 4  # rows fit on 32px OLED at 8px spacing
-
-    def draw_menu():
-        oled.fill(0)
-        for row, idx in enumerate(range(scroll_start, scroll_start + VISIBLE)):
-            if idx >= len(APPS):
-                break
-            prefix = ">" if idx == selected else " "
-            oled.text(f"{prefix} {APPS[idx]}", 0, row * 8)
-        oled.show()
-
-    draw_menu()
-
-    while True:
-        if controls.was_pressed("up"):
-            selected = (selected - 1) % len(APPS)
-            if selected < scroll_start:
-                scroll_start = selected
-            elif selected == len(APPS) - 1:
-                scroll_start = max(0, len(APPS) - VISIBLE)
-            draw_menu()
-        elif controls.was_pressed("down"):
-            selected = (selected + 1) % len(APPS)
-            if selected >= scroll_start + VISIBLE:
-                scroll_start = selected - VISIBLE + 1
-            elif selected == 0:
-                scroll_start = 0
-            draw_menu()
-        elif controls.was_pressed("ctrl"):
-            break
-        time.sleep(0.05)
-
-    if selected == 0:
-        from mini.weather import MiniWeather
-        MiniWeather().run()
-    elif selected == 1:
-        from mini.sensor_main import run as run_sensor
-        run_sensor()
-    elif selected == 2:
-        from mini.accel_main import run as run_accel
-        run_accel()
-    elif selected == 3:
-        from mini.led_test import run as run_led_test
-        run_led_test()
-    elif selected == 4:
-        from mini.sound_app import run as run_sound
-        run_sound()
-    elif selected == 5:
-        from mini.volumio_mini import run as run_volumio
-        run_volumio()
-    else:
-        from mini.tof_main import run as run_tof
-        run_tof()
 
 def main():
-    if Screen.width == 128:  # OLED detected
-        launch_mini()
-        return
-
     show_startup()
     menu = GameMenu()
     menu.draw(force_redraw=True)
-
     while True:
         result = menu.handle_input()
         if result == "selection_changed":
@@ -231,6 +106,7 @@ def main():
         elif result == "game_launched":
             menu.draw(force_redraw=True)
         Screen.Sleep(0.02)
+
 
 if __name__ == "__main__":
     main()

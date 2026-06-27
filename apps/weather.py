@@ -1,3 +1,4 @@
+# APP: WEATHER
 import urequests
 import time
 import json
@@ -211,3 +212,6 @@ class WeatherGame:
 def launch_weather():
     game = WeatherGame()
     game.run()
+
+
+run = launch_weather

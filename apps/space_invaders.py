@@ -1,3 +1,4 @@
+# APP: SPACE INVADERS
 import time
 import random
 from screen import Screen
@@ -202,3 +203,6 @@ class SpaceInvadersGame:
 def launch_space_invaders():
     game = SpaceInvadersGame()
     game.run()
+
+
+run = launch_space_invaders

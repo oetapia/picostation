@@ -1,3 +1,4 @@
+# APP: MUSIC PLAYER
 import urequests
 import time
 import json
@@ -207,3 +208,6 @@ class VolumioGame:
 def launch_volumio():
     game = VolumioGame()
     game.run()
+
+
+run = launch_volumio
