@@ -6,25 +6,33 @@ Deploy to Raspberry Pi Pico
 Syncs production files to the Pico using mpremote, skipping unchanged files
 by comparing file sizes.
 
+Supports mode selection:
+    - full:  TFT arcade (main_full.py → main.py)
+    - mini:  OLED apps  (main_mini.py → main.py)
+    - auto:  hardware auto-detect (main.py as-is)
+    - raw:   Raw WebSocket server (main_raw.py → main.py)
+
 Requirements:
     pip install mpremote
 
 Usage:
-    python deploy_to_pico.py [--dry-run] [--force] [--verbose] [--version {mini,full,auto}] [--remote REMOTE ...]
+    python deploy_to_pico.py [--dry-run] [--force] [--verbose] [--mode {mini,full,auto,raw}] [--remote REMOTE ...]
 
 Options:
     --dry-run              Show what would be copied without actually copying
     --force                Copy all files regardless of changes
     --verbose              Show detailed output
-    --version {mini,full,auto}
+    --mode {mini,full,auto,raw}
                            Which main to deploy (prompts if omitted)
     --remote REMOTE        IR profile(s) to deploy, e.g. --remote tiny xbox
                            Matches by substring against filenames in ir_profiles/.
                            Omit to deploy all profiles.
+    --clean                Wipe the Pico filesystem before deploying
 """
 
 import subprocess
 import sys
+import json
 import argparse
 from pathlib import Path
 
@@ -32,27 +40,31 @@ from pathlib import Path
 class PicoDeployer:
     """Deploy files to Raspberry Pi Pico using mpremote."""
 
-    # Individual root-level files to deploy
-    INCLUDE_FILES = [
-        'main.py',
-        'screen.py',
-        'wifi.py',
-        'vl53l0x_mp.py',
-        # config.py is gitignored — create it manually on the Pico
-    ]
-
-    # Directories to deploy recursively
-    INCLUDE_DIRS = [
-        'apps',
-        'mini',
-        'ir_profiles',
-        'breadboard',
-        'oled_screen',
-        'tft_screen',
-        'icons_16',
-        'icons_rgb565',
-        'lib',
-    ]
+    # Load configuration from pico_files.json (shared with sync_branches.py)
+    _config_path = Path(__file__).parent / 'pico_files.json'
+    if _config_path.exists():
+        with open(_config_path) as _f:
+            _PICO_FILES = json.load(_f)
+        INCLUDE_FILES = _PICO_FILES['include_files']
+        INCLUDE_DIRS = _PICO_FILES['include_dirs']
+    else:
+        INCLUDE_FILES = [
+            'main.py',
+            'screen.py',
+            'wifi.py',
+            'vl53l0x_mp.py',
+        ]
+        INCLUDE_DIRS = [
+            'apps',
+            'mini',
+            'ir_profiles',
+            'breadboard',
+            'oled_screen',
+            'tft_screen',
+            'icons_16',
+            'icons_rgb565',
+            'lib',
+        ]
 
     # Patterns to skip inside included directories
     EXCLUDE_PATTERNS = [
@@ -62,23 +74,42 @@ class PicoDeployer:
         '.git',
     ]
 
-    VERSION_MAIN = {
-        'mini': 'main_mini.py',
-        'full': 'main_full.py',
-        'auto': 'main.py',
+    # Mode configuration — maps mode name to deploy behavior
+    MODE_CONFIG = {
+        'full': {
+            'main_file': 'main_full.py',
+            'description': 'TFT Arcade — full-screen apps with gamepad',
+            'skip_files': ['main_mini.py', 'main_raw.py'],
+            'skip_dirs': [],
+        },
+        'mini': {
+            'main_file': 'main_mini.py',
+            'description': 'OLED Mini — compact apps with breadboard controls',
+            'skip_files': ['main_full.py', 'main_raw.py'],
+            'skip_dirs': ['icons_rgb565'],
+        },
+        'auto': {
+            'main_file': 'main.py',
+            'description': 'Auto-detect — picks TFT or OLED at boot',
+            'skip_files': ['main_mini.py', 'main_full.py', 'main_raw.py'],
+            'skip_dirs': [],
+        },
+        'raw': {
+            'main_file': 'main_raw.py',
+            'description': 'Raw WebSocket — lowest latency, web-connected apps',
+            'skip_files': ['main_mini.py', 'main_full.py'],
+            'skip_dirs': ['apps', 'mini', 'ir_profiles', 'icons_rgb565', 'tft_screen'],
+        },
     }
 
-    def __init__(self, dry_run=False, force=False, verbose=False, version='auto', clean=False, remotes=None):
+    def __init__(self, dry_run=False, force=False, verbose=False, mode=None, clean=False, remotes=None):
         self.dry_run = dry_run
         self.force = force
         self.verbose = verbose
-        self.version = version
+        self.mode = mode
         self.clean = clean
-        self.remotes = remotes  # list of profile substrings, or None for all
-        # Maps local filename → remote filename for files that need renaming
+        self.remotes = remotes
         self.rename_map = {}
-        if version in ('mini', 'full'):
-            self.rename_map[self.VERSION_MAIN[version]] = 'main.py'
         self.stats = {'copied': 0, 'skipped': 0, 'errors': 0, 'total': 0}
 
     def log(self, message, level='info'):
@@ -110,6 +141,58 @@ class PicoDeployer:
         print("✅ Pico connected\n")
         return True
 
+    def select_mode(self):
+        """Interactive mode selection if not specified via CLI."""
+        if self.mode:
+            return self.mode
+
+        print()
+        print("╔══════════════════════════════════════════════════╗")
+        print("║   Select Deploy Mode for PicoStation             ║")
+        print("╠══════════════════════════════════════════════════╣")
+        print("║                                                  ║")
+        print("║  1. Full (TFT Arcade)                            ║")
+        print("║     Full-screen apps with gamepad controls       ║")
+        print("║     Best for: games, weather, volumio            ║")
+        print("║                                                  ║")
+        print("║  2. Mini (OLED)                                  ║")
+        print("║     Compact apps with breadboard buttons         ║")
+        print("║     Best for: small display, IR remote           ║")
+        print("║                                                  ║")
+        print("║  3. Auto-detect                                  ║")
+        print("║     Picks TFT or OLED at boot                    ║")
+        print("║     Best for: flexible hardware setups           ║")
+        print("║                                                  ║")
+        print("║  4. Raw WebSocket                                ║")
+        print("║     Lowest latency, web-connected                ║")
+        print("║     Best for: phone/tablet control, dashboards   ║")
+        print("║                                                  ║")
+        print("╚══════════════════════════════════════════════════╝")
+        print()
+
+        while True:
+            choice = input("Select mode [1=Full, 2=Mini, 3=Auto, 4=Raw] (default: 3): ").strip()
+            if choice in ('', '3'):
+                self.mode = 'auto'
+                break
+            elif choice == '1':
+                self.mode = 'full'
+                break
+            elif choice == '2':
+                self.mode = 'mini'
+                break
+            elif choice == '4':
+                self.mode = 'raw'
+                break
+            else:
+                print("  Invalid choice. Enter 1, 2, 3, or 4.")
+
+        config = self.MODE_CONFIG[self.mode]
+        print(f"\n  → Mode: {config['description']}")
+        print(f"  → Main file on Pico: main.py ← {config['main_file']}")
+        print()
+        return self.mode
+
     def list_pico_files(self, remote_path: str) -> dict:
         """Return {relative_path: size} for all files under remote_path on the Pico."""
         stdout, _, returncode = self.run_mpremote(['ls', f':{remote_path}'])
@@ -131,19 +214,35 @@ class PicoDeployer:
         return any(p in str(filepath) for p in self.EXCLUDE_PATTERNS)
 
     def get_local_files(self) -> list:
-        """Collect all local files to deploy."""
+        """Collect all local files to deploy based on selected mode."""
+        config = self.MODE_CONFIG[self.mode]
         files = []
+
+        # Build rename map
+        self.rename_map = {}
+        main_file = config['main_file']
+        if main_file != 'main.py':
+            self.rename_map[main_file] = 'main.py'
+
+        # Determine which individual files to include
+        skip_files = set(config.get('skip_files', []))
         include_files = list(self.INCLUDE_FILES)
-        if self.version in ('mini', 'full'):
+
+        # For non-auto modes, swap the main file
+        if main_file != 'main.py':
             include_files = [f for f in include_files if f != 'main.py']
-            include_files.insert(0, self.VERSION_MAIN[self.version])
+            include_files.insert(0, main_file)
+
+        # Remove files that should be skipped for this mode
+        include_files = [f for f in include_files if f not in skip_files]
+
         for name in include_files:
             p = Path(name)
             if p.exists() and not self.should_exclude(p):
                 files.append(p)
-        skip_dirs = set()
-        if self.version == 'mini':
-            skip_dirs.add('icons_rgb565')
+
+        # Determine which directories to include
+        skip_dirs = set(config.get('skip_dirs', []))
         for dirname in self.INCLUDE_DIRS:
             if dirname in skip_dirs:
                 continue
@@ -156,6 +255,7 @@ class PicoDeployer:
                         if not any(r in p.name for r in self.remotes):
                             continue
                     files.append(p)
+
         return files
 
     def wipe_pico(self) -> bool:
@@ -164,8 +264,6 @@ class PicoDeployer:
         if self.dry_run:
             self.log("DRY RUN — skipping wipe", 'warning')
             return True
-        # Run a recursive delete on the Pico via a short exec snippet.
-        # Skips /lib (third-party libraries) and /config.py (credentials).
         wipe_script = (
             "import os\n"
             "SKIP = {'/lib', '/config.py'}\n"
@@ -226,9 +324,14 @@ class PicoDeployer:
                     self.log(f"Failed to remove {remote_path}: {stderr.strip()}", 'error')
 
     def deploy(self) -> bool:
-        version_label = {'mini': 'Mini (OLED)', 'full': 'Full (TFT)', 'auto': 'Auto-detect'}.get(self.version, self.version)
+        # Select mode (interactive if not specified)
+        self.select_mode()
+
+        config = self.MODE_CONFIG[self.mode]
+        mode_label = config['description']
+
         print("=" * 55)
-        print(f"🚀 PicoStation Deploy  [{version_label}]")
+        print(f"🚀 PicoStation Deploy  [{mode_label}]")
         print("=" * 55)
         if self.dry_run:
             self.log("DRY RUN — no files will be copied\n", 'warning')
@@ -291,30 +394,48 @@ class PicoDeployer:
 
         if self.stats['copied']:
             print("✅ Done! Reset the Pico to run main.py.")
+            if self.mode == 'raw':
+                print("   Raw WebSocket server will start on boot.")
+                print("   Connect with: ws://<pico-ip>:5000")
+            print()
         else:
             print("✅ Pico is already up to date.")
         return True
 
 
-def prompt_version() -> str:
-    print("Which version do you want to deploy?")
-    print("  1) Full  — TFT arcade (main_full.py → main.py)")
-    print("  2) Mini  — OLED apps  (main_mini.py → main.py)")
-    print("  3) Auto  — hardware auto-detect (main.py as-is)")
-    while True:
-        choice = input("Enter 1, 2, or 3: ").strip()
-        if choice == '1':
-            return 'full'
-        elif choice == '2':
-            return 'mini'
-        elif choice == '3':
-            return 'auto'
-        print("Please enter 1, 2, or 3.")
+def prompt_mode() -> str:
+    """Standalone prompt for when --mode is not given (used by main())."""
+    # The interactive prompt is handled inside PicoDeployer.select_mode()
+    return None
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Deploy PicoStation files to Raspberry Pi Pico via mpremote'
+        description='Deploy PicoStation files to Raspberry Pi Pico via mpremote',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Deploy Modes:
+  full    TFT Arcade (main_full.py → main.py)
+          Best for: games, weather, volumio on TFT screen
+
+  mini    OLED Mini (main_mini.py → main.py)
+          Best for: compact display, IR remote, breadboard
+
+  auto    Auto-detect (main.py as-is)
+          Best for: flexible setups that detect display at boot
+
+  raw     Raw WebSocket (main_raw.py → main.py)
+          Best for: phone/tablet control, web dashboards, low latency
+
+Examples:
+  python deploy_to_pico.py                    # Interactive mode selection
+  python deploy_to_pico.py --mode raw         # Deploy raw WS (lowest latency)
+  python deploy_to_pico.py --mode full        # Deploy TFT arcade mode
+  python deploy_to_pico.py --mode mini        # Deploy OLED mini mode
+  python deploy_to_pico.py --mode raw --force # Force full redeploy in raw mode
+  python deploy_to_pico.py --mode raw --clean # Wipe + fresh deploy
+  python deploy_to_pico.py --dry-run          # Preview what would be deployed
+        """
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Show what would be copied without copying')
@@ -322,8 +443,8 @@ def main():
                         help='Copy all files regardless of changes')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Show skipped files too')
-    parser.add_argument('--version', choices=['mini', 'full', 'auto'],
-                        help='Which main to deploy (prompts if omitted)')
+    parser.add_argument('--mode', choices=['mini', 'full', 'auto', 'raw'],
+                        help='Deploy mode (prompts interactively if omitted)')
     parser.add_argument('--clean', action='store_true',
                         help='Wipe the Pico filesystem before deploying')
     parser.add_argument('--remote', nargs='+', metavar='REMOTE',
@@ -331,10 +452,8 @@ def main():
                              '(e.g. --remote tiny xbox). Omit to deploy all.')
     args = parser.parse_args()
 
-    version = args.version if args.version else prompt_version()
-
     deployer = PicoDeployer(dry_run=args.dry_run, force=args.force, verbose=args.verbose,
-                            version=version, clean=args.clean, remotes=args.remote)
+                            mode=args.mode, clean=args.clean, remotes=args.remote)
     sys.exit(0 if deployer.deploy() else 1)
 
 

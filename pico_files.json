@@ -1,0 +1,28 @@
+{
+  "include_files": [
+    "main.py",
+    "main_full.py",
+    "main_mini.py",
+    "main_raw.py",
+    "screen.py",
+    "wifi.py",
+    "vl53l0x_mp.py",
+    "config.example.py"
+  ],
+  "include_dirs": [
+    "apps",
+    "mini",
+    "ir_profiles",
+    "breadboard",
+    "oled_screen",
+    "tft_screen",
+    "icons_16",
+    "icons_rgb565",
+    "lib"
+  ],
+  "exclude_patterns": [
+    "*.pyc",
+    "__pycache__",
+    ".DS_Store"
+  ]
+}

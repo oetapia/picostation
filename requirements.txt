@@ -1,0 +1,5 @@
+# Host-side dependencies (for deployment & branch-sync scripts)
+# MicroPython libraries (machine, network, ssd1306, etc.) run on the Pico directly.
+
+# Pico deployment tool (deploy_to_pico.py)
+mpremote>=1.20.0

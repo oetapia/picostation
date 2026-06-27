@@ -23,7 +23,8 @@ class GameMenu:
             {"name": "SPACE INVADERS", "description": "Shoot the aliens!"},
             {"name": "MUSIC PLAYER", "description": "Volumio controls"},
             {"name": "WEATHER", "description": "City weather"},
-            {"name": "SNAKE", "description": "Classic snake game"}
+            {"name": "SNAKE", "description": "Classic snake game"},
+            {"name": "PICAR WS", "description": "WebSocket car control"},
         ]
         
     def draw(self, force_redraw=False):
@@ -73,9 +74,9 @@ class GameMenu:
     
     def launch_selected_game(self):
         selected = self.games[self.selected_game]
-        
+
         if selected["name"] == "SPACE INVADERS":
-            launch_space_invaders()  # <- No arguments
+            launch_space_invaders()
             return "game_launched"
         elif selected["name"] == "MUSIC PLAYER":
             launch_volumio()
@@ -85,6 +86,9 @@ class GameMenu:
             return "game_launched"
         elif selected["name"] == "SNAKE":
             launch_snake()
+            return "game_launched"
+        elif selected["name"] == "PICAR WS":
+            launch_picar_ws()
             return "game_launched"
         return None
 
@@ -116,6 +120,13 @@ def launch_snake():
     from apps.snake import SnakeGame
     game = SnakeGame()
     game.run()
+
+def launch_picar_ws():
+    Screen.Clear()
+    Screen.Write("Connecting to PiCar...", 30, 100, Screen.YELLOW)
+    from apps.picar_client_ws import PicarWsApp
+    app = PicarWsApp()
+    app.run()
 
 def show_startup():
     Screen.Clear()
@@ -158,7 +169,7 @@ def launch_mini():
     from breadboard.buttons import GameControls
     controls = GameControls()
 
-    APPS = ["WEATHER", "IR SENSOR", "ACCEL", "LED TEST", "SOUND", "VOLUMIO", "TOF"]
+    APPS = ["WEATHER", "IR SENSOR", "ACCEL", "LED TEST", "SOUND", "VOLUMIO", "TOF", "PICAR"]
     selected = 0
     scroll_start = 0
     VISIBLE = 4  # rows fit on 32px OLED at 8px spacing
@@ -211,9 +222,12 @@ def launch_mini():
     elif selected == 5:
         from mini.volumio_mini import run as run_volumio
         run_volumio()
-    else:
+    elif selected == 6:
         from mini.tof_main import run as run_tof
         run_tof()
+    else:
+        from mini.picar_remote import run as run_picar
+        run_picar()
 
 def main():
     if Screen.width == 128:  # OLED detected

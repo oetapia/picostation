@@ -14,7 +14,8 @@ class GameMenu:
             {"name": "SPACE INVADERS", "description": "Shoot the aliens!"},
             {"name": "MUSIC PLAYER", "description": "Volumio controls"},
             {"name": "WEATHER", "description": "City weather"},
-            {"name": "SNAKE", "description": "Classic snake game"}
+            {"name": "SNAKE", "description": "Classic snake game"},
+            {"name": "PICAR WS", "description": "WebSocket car control"},
         ]
 
     def draw(self, force_redraw=False):
@@ -68,6 +69,9 @@ class GameMenu:
         elif selected["name"] == "SNAKE":
             launch_snake()
             return "game_launched"
+        elif selected["name"] == "PICAR WS":
+            launch_picar_ws()
+            return "game_launched"
         return None
 
 
@@ -99,6 +103,14 @@ def launch_snake():
     from apps.snake import SnakeGame
     game = SnakeGame()
     game.run()
+
+
+def launch_picar_ws():
+    Screen.Clear()
+    Screen.Write("Connecting to PiCar...", 30, 100, Screen.YELLOW)
+    from apps.picar_client_ws import PicarWsApp
+    app = PicarWsApp()
+    app.run()
 
 
 def show_startup():
